@@ -1,0 +1,20 @@
+[package]
+name = "mascara-transfer"
+version = "0.1.0"
+edition = "2021"
+description = "File-transfer code preserved verbatim from Hoardbook v0.9.0 (pending the Mascara refactor — see src/lib.rs)"
+
+[dependencies]
+# Expected dependencies for the preserved transfer modules — re-enable during the refactor,
+# alongside un-commenting the modules in src/lib.rs. Left inactive so the preservation scaffold
+# compiles instantly and pulls nothing until the refactor wires the code to Mascara's own identity.
+# hb-core    = { path = "../hb-core" }
+# hb-net     = { path = "../hb-net" }
+# iroh       = { version = "0.98", default-features = false, features = ["tls-ring"] }
+# tokio      = { workspace = true }
+# anyhow     = { workspace = true }
+# serde      = { workspace = true }
+# serde_json = { workspace = true }
+# hex        = { workspace = true }
+# tracing    = { workspace = true }
+# sha2       = "0.10"

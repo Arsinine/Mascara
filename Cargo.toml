@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/hb-core", "crates/hb-net", "crates/mascara-transfer"]
+resolver = "2"
+
+[patch.crates-io]
+wmi = { path = "vendor/wmi" }
+
+[workspace.dependencies]
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+thiserror   = "1"
+anyhow      = "1"
+chrono      = { version = "0.4", features = ["serde"] }
+tokio       = { version = "1", features = ["full"] }
+tracing     = "0.1"
+hex         = "0.4"
+zeroize     = { version = "1", features = ["derive"] }
+
+# --- M5 portable backup crypto: Argon2id KDF + NFKC passphrase normalization.
+#     XChaCha20-Poly1305 comes from hb-core's existing `chacha20poly1305` dep (the
+#     `xchacha20poly1305` feature is enabled there). ---
+argon2                = "0.5"
+unicode-normalization = "0.1"
+
+# --- v0.9 Nostr relay client (M2). nostr-sdk default features are EMPTY (no NIPs), so the
+#     NIP-44/NIP-59 features must be requested explicitly. Pinned to the M0-verified surface
+#     (=0.43.0) alongside hb-core's nostr =0.43.1 so a silent minor bump can't break interop. ---
+nostr-sdk   = { version = "=0.43.0", default-features = false, features = ["nip44", "nip59"] }

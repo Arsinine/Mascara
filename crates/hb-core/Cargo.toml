@@ -1,0 +1,38 @@
+[package]
+name    = "hb-core"
+version = "0.9.0"
+edition = "2021"
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+chrono     = { workspace = true }
+hex        = { workspace = true }
+
+# --- v0.9 Nostr core (M1). Pinned to the M0-verified surface (=0.43.1) so a silent
+#     minor bump can't break the interop suite. bech32 0.11 = the `Hrp`/encode/decode API. ---
+nostr             = { version = "=0.43.1", features = ["nip44"] }
+bech32            = "0.11"
+
+# --- M5 portable backup crypto: Argon2id (KDF) → XChaCha20-Poly1305 (AEAD). `zeroize`
+#     wipes the derived key; `unicode-normalization` NFKC-normalizes the passphrase so a backup
+#     made on one OS decrypts on another. XChaCha20-Poly1305 ships in `chacha20poly1305` 0.10 with
+#     no extra feature (the brief's `xchacha20poly1305` feature does not exist in this version);
+#     the default `alloc` feature provides the AAD `Payload` API. ---
+argon2                = { workspace = true }
+unicode-normalization = { workspace = true }
+zeroize               = { workspace = true }
+
+# --- shared crypto primitives still in use post-pivot: `rand` (key/salt/nonce), `sha2`
+#     (fingerprint + HKDF), `chacha20poly1305` (M5 backup XChaCha20-Poly1305), `hkdf` + `base64`
+#     (NIP-44 listing envelope). The dead M4 leftovers — `ed25519-dalek`, `bs58`, `x25519-dalek` —
+#     were removed at the v0.9.0 release (zero use sites after the Ed25519 / `hb1_` / X25519 deletion). ---
+rand              = "0.8"
+sha2              = "0.10"
+chacha20poly1305  = "0.10"
+hkdf              = "0.12"
+base64            = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true }

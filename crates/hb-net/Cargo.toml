@@ -1,0 +1,23 @@
+[package]
+name    = "hb-net"
+version = "0.9.0"
+edition = "2021"
+
+# M2 — the Nostr relay client. Turns hb-core's offline primitives into a working signaling
+# plane: connect/publish/fetch teaser·presence·listing·NIP-17 DM events across a relay set,
+# dedup by event id, NIP-65 relay-list resolution, NIP-13 proof-of-work, NIP-09 deletion, and
+# the oversize-listing split/restitch protocol. Consumed by hb-it now (the L2 suite) and by
+# hb-app in M4 — so the integration suite tests the real production code, not a parallel impl.
+# All async + nostr-sdk + tokio-runtime weight lives here, keeping hb-core lean/synchronous.
+
+[dependencies]
+hb-core    = { path = "../hb-core" }
+nostr-sdk  = { workspace = true }
+# Direct `nostr` dep pinned to hb-core's version, with the protocol features this crate needs
+# (NIP-44 listing crypto, NIP-59/17 gift-wrap). Unifies with hb-core's nostr build.
+nostr      = { version = "=0.43.1", features = ["nip44", "nip59"] }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/hb-core", "crates/hb-net", "crates/mascara-transfer"]
+members = [
+    "crates/mascara-core",
+    # preserved quarry (see README) — leaves the workspace once mined:
+    "crates/hb-core", "crates/hb-net", "crates/mascara-transfer",
+]
 resolver = "2"
 
 [patch.crates-io]
@@ -15,6 +19,15 @@ tokio       = { version = "1", features = ["full"] }
 tracing     = "0.1"
 hex         = "0.4"
 zeroize     = { version = "1", features = ["derive"] }
+
+# --- Mascara identity (DESIGN.md §2 / spec D10): two independent keys under one card.
+#     ed25519 = the iroh transport identity (constructed from raw bytes in mascara-net, keeping
+#     mascara-core network-free); X25519 = the age-style sealing key. bech32m encodes the card. ---
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+x25519-dalek  = { version = "2", features = ["static_secrets", "zeroize"] }
+bech32        = "0.11"
+rand          = "0.8"
+dirs          = "5"
 
 # --- M5 portable backup crypto: Argon2id KDF + NFKC passphrase normalization.
 #     XChaCha20-Poly1305 comes from hb-core's existing `chacha20poly1305` dep (the

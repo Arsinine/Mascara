@@ -18,8 +18,12 @@ in [`MASCARA_SPEC.md`](MASCARA_SPEC.md).
 ## Layout
 
 ```
-MASCARA_SPEC.md                         # the spec (v0.2 — refined via requirements interview; see its Decision Log)
+MASCARA_SPEC.md                         # the spec (v0.3 — see its Decision Log D1–D13)
+DESIGN.md                               # implementation design: crates, formats, protocol, milestones
+PROCESS_ENGINEERING.md                  # how Mascara is built (Hoardbook playbook + Mascara deltas)
+HANDOVER.md TEST_PLAN.md REGRESSION.md INVARIANT_AUDIT.md CLAUDE.md planning/
 crates/
+  mascara-core/                         # NEW (M0): identity, contact card, keystore — pure, no net I/O
   mascara-transfer/
     src/                                # preserved VERBATIM, transfer-only:
       transfer.rs                       #   /hoardbook/xfer/1 protocol, H2/H17 gate, integrity check

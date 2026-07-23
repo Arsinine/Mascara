@@ -1,1 +1,5 @@
 /target
+
+# Local-only docs: keep only README files under version control.
+*.md
+!**/README.md

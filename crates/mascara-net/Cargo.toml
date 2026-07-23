@@ -1,0 +1,21 @@
+[package]
+name = "mascara-net"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Mascara net: the /mascara/xfer/1 iroh transport, consent gate, listener/dialer/engine (DESIGN.md §1)"
+
+[dependencies]
+mascara-core = { path = "../mascara-core" }
+iroh         = { workspace = true }
+tokio        = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+chrono       = { workspace = true }
+hex          = { workspace = true }
+rand         = { workspace = true }
+sha2         = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

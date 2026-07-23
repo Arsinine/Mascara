@@ -1,0 +1,46 @@
+//! Crate error type. One enum, reasoned variants — mirrors `mascara-core`'s `CoreError` discipline
+//! (recognise-and-refuse, never a panic — Suite MAB) so the CLI can surface these verbatim.
+
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum NetError {
+    /// A `mascara-core` operation failed (ticket open, registry, source check).
+    #[error("{0}")]
+    Core(#[from] mascara_core::CoreError),
+
+    /// An underlying I/O or stream failure — includes a QUIC stream breaking mid-transfer.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// A protocol-shape problem: a malformed ticket address, an unparseable frame, an
+    /// unsupported version — recognise-and-refuse, never a panic.
+    #[error("{0}")]
+    Protocol(String),
+
+    /// The endpoint could not be built or bound.
+    #[error("{0}")]
+    Endpoint(String),
+
+    /// Could not establish or use the QUIC connection to the peer.
+    #[error("{0}")]
+    Connection(String),
+
+    /// The sender refused the request (DESIGN §4) — the message is the sender's reasoned text.
+    #[error("refused by the sender: {0}")]
+    Refused(String),
+
+    /// The received bytes did not hash to the ticket's `sha256` — the partial was discarded
+    /// (`sem_fileref_hash_verified_before_available`).
+    #[error("received bytes do not match the ticket's sha256 — the partial download was discarded")]
+    HashMismatch,
+
+    /// The connection ended without the transfer completing, and it was NOT a peer-initiated
+    /// cancel (DESIGN §4/§6) — a network drop, not an application close.
+    #[error("{0}")]
+    ConnectionLost(String),
+
+    /// The peer explicitly cancelled (QUIC close, application error code 1 — DESIGN §4).
+    #[error("cancelled by peer")]
+    Cancelled,
+}

@@ -1,0 +1,19 @@
+[package]
+name = "mascara-cli"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Mascara CLI: card / send / tickets — thin over mascara-core (DESIGN.md §8), network-free at M1"
+
+[[bin]]
+name = "mascara"
+path = "src/main.rs"
+
+[dependencies]
+mascara-core = { path = "../mascara-core" }
+mascara-net  = { path = "../mascara-net" }
+clap         = { workspace = true }
+anyhow       = { workspace = true }
+chrono       = { workspace = true }
+tokio        = { workspace = true }
+hex          = { workspace = true }

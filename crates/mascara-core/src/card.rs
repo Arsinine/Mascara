@@ -48,15 +48,24 @@ pub(crate) fn binding_message(sealing_pk: &[u8; 32]) -> Vec<u8> {
 }
 
 impl Card {
-    /// Encode as the card string (`mascara1…`).
-    pub fn encode(&self) -> String {
+    /// The canonical card payload bytes: `0x01 || transport pk || sealing pk || binding sig`
+    /// (129 bytes). This is what the bech32m string wraps, and — byte-for-byte — what a
+    /// `link_assertion` signs over (`"mascara-link-v1" || card payload bytes || nonce`, DESIGN.md
+    /// §2). Exposing it keeps the assertion's message definition unambiguous and in one place.
+    pub fn payload_bytes(&self) -> Vec<u8> {
         let mut payload = Vec::with_capacity(CARD_PAYLOAD_LEN);
         payload.push(CARD_VERSION);
         payload.extend_from_slice(&self.transport_pk);
         payload.extend_from_slice(&self.sealing_pk);
         payload.extend_from_slice(&self.binding_sig);
+        payload
+    }
+
+    /// Encode as the card string (`mascara1…`).
+    pub fn encode(&self) -> String {
         let hrp = Hrp::parse(CARD_HRP).expect("static hrp is valid");
-        bech32::encode::<Bech32m>(hrp, &payload).expect("card payload is well under bech32 limits")
+        bech32::encode::<Bech32m>(hrp, &self.payload_bytes())
+            .expect("card payload is well under bech32 limits")
     }
 
     /// Parse and validate a pasted card. Every failure is reasoned — the paste channel is the

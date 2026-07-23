@@ -1,0 +1,24 @@
+[package]
+name = "mascara-it"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Mascara L2 integration harness: two real iroh endpoints in one process over loopback (TEST_PLAN.md §1, mascara-it)"
+
+[[bin]]
+name = "mascara-it"
+path = "src/main.rs"
+
+[dependencies]
+mascara-core = { path = "../mascara-core" }
+mascara-net  = { path = "../mascara-net" }
+# Named directly only for the `Setup.sender_ep: iroh::Endpoint` field type — everything else
+# flows through mascara-net's own return types.
+iroh         = { workspace = true }
+tokio        = { workspace = true }
+anyhow       = { workspace = true }
+chrono       = { workspace = true }
+sha2         = { workspace = true }
+# Real (not dev-) dependency: a `[[bin]]` target does not get dev-dependencies (only test/example/
+# bench targets do), and this harness needs tempdirs at normal `cargo run` time.
+tempfile     = "3"

@@ -2,6 +2,7 @@
 name = "mascara-core"
 version = "0.1.0"
 edition = "2021"
+publish = false
 description = "Mascara core: identity, contact card, keystore, tickets — pure logic, no network I/O (DESIGN.md §1)"
 
 [dependencies]
@@ -16,6 +17,18 @@ x25519-dalek  = { workspace = true }
 bech32        = { workspace = true }
 rand          = { workspace = true }
 dirs          = { workspace = true }
+# M1: ticket seal/open, registry, verify-only link_assertion (DESIGN.md §2/§3).
+# The seal is a crypto_box sealed box to the raw X25519 sealing key since M2 (B4).
+crypto_box    = { workspace = true }
+postcard      = { workspace = true }
+base64        = { workspace = true }
+sha2          = { workspace = true }
+secp256k1     = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+# The MR-8 semantic guard constructs `IssuedRecord`s with real `DateTime<Utc>` values.
+chrono = { workspace = true }
+# Tests mint a BIP340 signature to exercise the verify-only `assertion` path; signing needs the
+# `std` context (`signing_only()` + `Keypair`). The library build stays verify-only + alloc.
+secp256k1 = { version = "0.29", features = ["std"] }

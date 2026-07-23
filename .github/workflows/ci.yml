@@ -1,0 +1,118 @@
+name: CI
+
+# TEST_PLAN.md §5 CI matrix (wired at M2). Frontend (vitest/svelte-check) is M5+ and out of scope.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test --workspace --locked
+        run: cargo test --workspace --locked
+      # Scoped to the live crates, not --workspace: the preserved quarry (hb-core/hb-net/
+      # mascara-transfer, CLAUDE.md §3 — read-only reference, never edited) predates the -D
+      # warnings clippy discipline and isn't clean under it. HANDOVER.md's M1 entry records the
+      # same scoping ("cargo clippy -D warnings clean on the new crates").
+      - name: cargo clippy -p mascara-core -p mascara-net -p mascara-cli -p mascara-it --all-targets --locked -- -D warnings
+        run: cargo clippy -p mascara-core -p mascara-net -p mascara-cli -p mascara-it --all-targets --locked -- -D warnings
+
+  integration:
+    name: integration (L2 loopback)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo run -p mascara-it --locked
+        run: cargo run -p mascara-it --locked
+
+  sweeps:
+    name: sweeps (absence greps + audit + deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # All three sweeps below strip `//` comments before matching (same technique as
+      # mascara-core/tests/semantic_guards.rs's `code_line`) — a doc comment that *names* an
+      # absent mechanism to explain it (e.g. endpoint.rs's own module docs) must not self-trip.
+
+      # TEST_PLAN.md §3: mascara-core/mascara-net/mascara-cli/mascara-it free of the nostr/
+      # nostr-sdk crate (imports + deps). Targets the crate/import, NOT the bare substring `npub`
+      # — M1's sanctioned `LinkAssertion.npub` (assertion.rs) and the MAS-INV-1 disclaimers
+      # elsewhere would false-positive a naive `grep npub`. The quarry (hb-core/hb-net/
+      # mascara-transfer) legitimately depends on nostr and is out of scope.
+      - name: absence sweep — no nostr/nostr-sdk in the live crates (MAS-INV-1)
+        run: |
+          set -euo pipefail
+          hit=0
+          while IFS= read -r -d '' f; do
+            [ "$f" = "crates/mascara-core/src/assertion.rs" ] && continue
+            out=$(sed -E 's#//.*##' "$f" | grep -niE 'nostr[_-]sdk|use[[:space:]]+nostr\b|\bnostr::' || true)
+            if [ -n "$out" ]; then echo "$out" | sed "s#^#$f:#"; hit=1; fi
+          done < <(find crates/mascara-core/src crates/mascara-net/src crates/mascara-cli/src crates/mascara-it/src -name '*.rs' -print0)
+          if [ "$hit" = 1 ]; then
+            echo "::error::MAS-INV-1: a nostr/nostr-sdk symbol appeared in a live crate outside assertion.rs (TEST_PLAN.md §3)"
+            exit 1
+          fi
+          if grep -niE 'nostr[_-]sdk' \
+               crates/mascara-core/Cargo.toml crates/mascara-net/Cargo.toml \
+               crates/mascara-cli/Cargo.toml crates/mascara-it/Cargo.toml; then
+            echo "::error::MAS-INV-1: a live crate declares a nostr-sdk dependency (TEST_PLAN.md §3)"
+            exit 1
+          fi
+          echo "ok: no nostr/nostr-sdk symbol in the live crates"
+
+      # TEST_PLAN.md §3: no discovery-publish API call anywhere (MAS-INV-3). Belt-and-braces on
+      # top of the cargo-test guard sem_no_discovery_publish_or_consume (semantic_guards.rs).
+      - name: absence sweep — no discovery-publish API call (MAS-INV-3)
+        run: |
+          set -euo pipefail
+          hit=0
+          while IFS= read -r -d '' f; do
+            out=$(sed -E 's#//.*##' "$f" | grep -niE 'presets::n0|\.address_lookup\(' || true)
+            if [ -n "$out" ]; then echo "$out" | sed "s#^#$f:#"; hit=1; fi
+          done < <(find crates/mascara-net/src -name '*.rs' -print0)
+          if [ "$hit" = 1 ]; then
+            echo "::error::MAS-INV-3: a discovery-publish/consume call appeared in mascara-net (TEST_PLAN.md §3)"
+            exit 1
+          fi
+          echo "ok: no discovery-publish API call in mascara-net"
+
+      # TEST_PLAN.md §3: no relay-data-path fallback configuration (D1). Belt-and-braces on top of
+      # the same cargo-test guard.
+      - name: absence sweep — no relay-data-path fallback config (D1)
+        run: |
+          set -euo pipefail
+          hit=0
+          while IFS= read -r -d '' f; do
+            out=$(sed -E 's#//.*##' "$f" | grep -niE 'relaymode::(default|custom|staging)' || true)
+            if [ -n "$out" ]; then echo "$out" | sed "s#^#$f:#"; hit=1; fi
+          done < <(find crates/mascara-net/src -name '*.rs' -print0)
+          if [ "$hit" = 1 ]; then
+            echo "::error::D1: a non-Disabled RelayMode fallback appeared in mascara-net (TEST_PLAN.md §3)"
+            exit 1
+          fi
+          echo "ok: no relay-data-path fallback config in mascara-net"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+
+      - name: cargo audit
+        run: cargo audit
+
+      - name: cargo deny check
+        run: cargo deny check

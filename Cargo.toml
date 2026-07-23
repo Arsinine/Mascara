@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "crates/mascara-core",
+    "crates/mascara-cli",
+    "crates/mascara-net",
+    "crates/mascara-it",
     # preserved quarry (see README) — leaves the workspace once mined:
     "crates/hb-core", "crates/hb-net", "crates/mascara-transfer",
 ]
@@ -28,6 +31,39 @@ x25519-dalek  = { version = "2", features = ["static_secrets", "zeroize"] }
 bech32        = "0.11"
 rand          = "0.8"
 dirs          = "5"
+
+# --- M1 ticket + registry + assertion (DESIGN.md §3/§2, spec §Core Concepts).
+#     crypto_box = sealed-box X25519 seal of the postcard ticket body (D10; B4 — replaced age at
+#     M2: raw keys, no bech32 bridge, smaller envelope; the "seal" feature is the libsodium
+#     crypto_box_seal pair, and the envelope format is frozen by `sem_ticket_seal_frozen` open-side
+#     golden vectors in ticket.rs); base64url wraps the sealed bytes into the `mascara-ticket-v1:`
+#     string; sha2 hashes the file (file_ref) and the assertion message; secp256k1 is VERIFY-ONLY
+#     (BIP340 schnorr) for `link_assertion` — the single allowed exception to the nostr/npub
+#     absence sweep (MAS-INV-1), pinned to the quarry-resolved 0.29 so the lock stays
+#     single-version and secp256k1-sys is built once. ---
+crypto_box  = { version = "0.9.1", features = ["seal"] }
+# postcard is `=`-PINNED (A4, appraisal 2026-07-22): its bytes are the commitment substrate — the
+# ticket body today, the manifest `root_hash` (M3) and covenant canonical bytes (M7) later. A dep
+# bump must be a conscious act paired with the `sem_ticket_body_postcard_frozen` golden vectors
+# (ticket.rs), never a silent `cargo update` re-serialization.
+postcard    = { version = "=1.1.3", default-features = false, features = ["use-std"] }
+base64      = "0.22"
+sha2        = "0.10"
+secp256k1   = { version = "0.29", default-features = false, features = ["alloc"] }
+clap        = { version = "4", features = ["derive"] }
+
+# --- M2 mascara-net (DESIGN.md §1/§4/§6, appraisal B1): the /mascara/xfer/1 protocol engine.
+#     iroh 1.0.3 (floor >=1.0.2 for the relay receive-lane fairness fix; 1.0.3 also fixes empty-
+#     ALPN accepts — DESIGN §12.7). default-features=false: no discovery service is pulled in at
+#     all (we build every endpoint on `presets::Minimal`, which has zero address-lookup services —
+#     MAS-INV-3, `sem_no_discovery_publish_or_consume`). tls-ring supplies the crypto provider the
+#     `Minimal`/`N0` presets require; metrics/portmapper are iroh's own low-risk default features
+#     (portmapper only assists local NAT hole-punching — M4 — it publishes nothing). ---
+# version is a caret FLOOR (>=1.0.2 for the relay receive-lane fairness fix), not an exact `=` pin —
+# the floor is deliberate so security patches on the 1.x line flow (DESIGN §12.7). The Cargo.lock
+# resolves 1.0.3 today; a wire/config-behaviour freeze (if one is ever needed) would switch this to
+# `=` and re-freeze against it, per the freeze-class rule.
+iroh        = { version = "1.0.3", default-features = false, features = ["tls-ring", "metrics", "portmapper"] }
 
 # --- M5 portable backup crypto: Argon2id KDF + NFKC passphrase normalization.
 #     XChaCha20-Poly1305 comes from hb-core's existing `chacha20poly1305` dep (the

@@ -1,0 +1,48 @@
+# cargo-deny config (M2 CI — TEST_PLAN.md §4/§5). Minimal: only the sections we actually need;
+# everything else keeps cargo-deny's own defaults.
+
+[graph]
+# Match the CI matrix (TEST_PLAN §5: ubuntu-latest + windows-latest) so platform-gated deps that
+# never actually build for us (e.g. `r-efi`, UEFI-only via `getrandom`) don't show up as findings.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+# The preserved quarry (hb-core, hb-net, mascara-transfer — CLAUDE.md §3: read-only reference,
+# mined, never edited in place, so no `publish = false` / license metadata can be added there like
+# the live mascara-* crates below). Excluding them prunes their exclusive deps too (nostr, nostr-sdk,
+# instant, etc. — confirmed nothing in the live mascara-* tree uses them) from every cargo-deny
+# check, so quarry-only findings can't gate CI (`cargo test --workspace` still covers the quarry;
+# only cargo-deny's supply-chain checks skip it). Revisit when the quarry leaves the workspace
+# post-mining (TEST_PLAN §3 "post-mining" row) — this exclude list should shrink to empty then.
+exclude = ["hb-core", "hb-net", "mascara-transfer"]
+
+# No [advisories] section: defaults apply. The one advisory the quarry raised (`instant`,
+# RUSTSEC-2024-0384, unmaintained) is already pruned by [graph].exclude above, so no ignore is
+# needed here. NOT ignored: `paste` (RUSTSEC-2024-0436, unmaintained) reaches the tree live, via
+# iroh -> netdev -> netlink-packet-core (mascara-net's real dependency graph) — see the M2 CI
+# handover note; this is a genuine live-tree finding to fix upstream (bump iroh/netdev when a
+# release drops it), not to silence here.
+
+# The permissive set this tree actually uses (`cargo deny list`, M2). Anything outside this list
+# is a real finding, not an ignore — report it, don't silently allow it in.
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+[licenses.private]
+ignore = true

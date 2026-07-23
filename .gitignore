@@ -3,3 +3,6 @@
 # Local-only docs: keep only README files under version control.
 *.md
 !**/README.md
+
+# Claude Code local settings (contains LiteLLM key)
+.claude/settings.local.json

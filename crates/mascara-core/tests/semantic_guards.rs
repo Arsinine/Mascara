@@ -277,9 +277,9 @@ fn derives_above(src: &str, ty: &str) -> String {
 }
 
 /// MR-22 — a ticket's content commitment **originates in the `ShareDescriptor`**, never a Mascara
-/// computation. Behavioural: a descriptor round-trips from JSON and `descriptor.file_ref()` yields a
-/// `FileRef` whose `sha256`/`md5` are the ones the descriptor *carried*. Structural: `ticket.rs`
-/// contains no `from_path` (send-side hashing is gone).
+/// computation. Behavioural: a file descriptor round-trips from JSON and `descriptor.file_ref()`
+/// yields a `FileRef` whose `sha256`/`md5` are the ones the descriptor *carried*. Structural:
+/// `ticket.rs` contains no `from_path` (send-side hashing is gone).
 ///
 /// Guards `sem_ticket_built_from_descriptor` (SEMANTIC_MODEL.md, Tier A; MR-13/MR-22). Source:
 /// DOMAIN_MODEL "The seam — ShareDescriptor" — Mascara "consumes it, caches the hash … serves
@@ -290,13 +290,14 @@ fn sem_ticket_built_from_descriptor() {
 
     // (a) Behaviour: hashes are carried from the descriptor into the FileRef, not recomputed.
     let json = format!(
-        r#"{{ "name": "m.mkv", "size": 42, "sha256": "{}", "md5": "{}",
+        r#"{{ "kind": "file", "name": "m.mkv", "size": 42, "sha256": "{}", "md5": "{}",
               "mime": null, "link_assertion": null }}"#,
         hex::encode([0xABu8; 32]),
         hex::encode([0xCDu8; 16]),
     );
     let d = ShareDescriptor::from_json_str(&json).expect("a well-formed descriptor must parse");
-    let fr = d.file_ref();
+    let ShareDescriptor::File(file) = d else { panic!("expected the file variant") };
+    let fr = file.file_ref();
     assert_eq!(fr.sha256, [0xABu8; 32], "sha256 must be the descriptor's, carried not computed");
     assert_eq!(fr.md5, [0xCDu8; 16], "md5 must be the descriptor's, carried not computed");
     assert_eq!((fr.name.as_str(), fr.size), ("m.mkv", 42));
@@ -312,7 +313,16 @@ fn sem_ticket_built_from_descriptor() {
 
 /// MR-13 — Mascara computes **no** content commitment at ticket-creation. Source sweep: no
 /// content-hash crate import (`use sha2` / `use md5` / `use sha1` / `use blake3`) appears in
-/// `ticket.rs` or `share.rs` — the commitment is carried in the `ShareDescriptor`, never computed.
+/// `ticket.rs` — the ticket body's per-file commitment is carried from the `ShareDescriptor`,
+/// never computed.
+///
+/// `share.rs` is **not** swept here at M3 stage 2: a folder descriptor's
+/// [`crate::FolderDescriptor::verify_root_hash`] computes `sha256(manifest bytes)` to consistency-
+/// check **Hoardbook's own two claims** (its entries vs its declared `root_hash`) before minting a
+/// folder ticket — that is verifying a carried commitment, not originating one (the per-entry
+/// sha256/md5 are still carried, never computed). The manifest's own `root_hash`/`verify` helpers
+/// in `manifest.rs` were never swept either, for the same reason. The per-file sha256/md5 in a
+/// `FileRef`/`ManifestEntry` remain carried values, never computed.
 ///
 /// (Note: `assertion.rs` legitimately hashes the link-assertion *message* with sha2 and is out of
 /// scope — that is domain-separation for a signature, not a content commitment. This guard is about
@@ -323,20 +333,22 @@ fn sem_ticket_built_from_descriptor() {
 fn sem_mascara_no_commitment_hashing() {
     const HASH_IMPORTS: [&str; 4] = ["use sha2", "use md5", "use sha1", "use blake3"];
     let mut violations: Vec<String> = Vec::new();
-    for file in ["ticket.rs", "share.rs"] {
-        let path = core_dir().join("src").join(file);
-        let src = std::fs::read_to_string(&path).unwrap();
-        for (idx, raw) in code_only(&src).lines().enumerate() {
-            for imp in HASH_IMPORTS {
-                if raw.contains(imp) {
-                    violations.push(format!("  {}:{} — `{imp}`", path.display(), idx + 1));
-                }
+    // Only ticket.rs is swept: ticket-body content commitments (per-file sha256/md5) must be
+    // carried, never computed. share.rs's manifest root_hash consistency check is a verify, not a
+    // commitment origin (see the test's module doc above); manifest.rs is unswept for the same
+    // reason.
+    let path = core_dir().join("src").join("ticket.rs");
+    let src = std::fs::read_to_string(&path).unwrap();
+    for (idx, raw) in code_only(&src).lines().enumerate() {
+        for imp in HASH_IMPORTS {
+            if raw.contains(imp) {
+                violations.push(format!("  {}:{} — `{imp}`", path.display(), idx + 1));
             }
         }
     }
     assert!(
         violations.is_empty(),
-        "MR-13: content-hash crate import(s) in the ticket-creation path (commitment must be carried, not computed):\n{}",
+        "MR-13: content-hash crate import(s) in ticket.rs (the per-file commitment must be carried, not computed):\n{}",
         violations.join("\n")
     );
 }
@@ -566,31 +578,56 @@ fn sem_ticket_endpoint_only_sealed() {
 /// Guards `sem_no_bytes_before_consent`'s structural half (SEMANTIC_MODEL.md, Tier B). The
 /// behavioural half (the ack is constructible ONLY via `consent::acknowledge_ip_exposure`) is
 /// `mascara-net/src/consent.rs`'s `ack_is_constructible_via_the_one_function` test.
+/// **Covers EVERY public dialing entry point, not just `pull`** (codex #12): M3 added
+/// `fetch_manifest` and `pull_folder`, each of which opens its own connection and moves bytes. A
+/// sweep that checked only `pull` would stay green if either new entry point lost its ack — so the
+/// list below is asserted to be exhaustive against `dialer.rs`'s public `pub async fn`s.
 #[test]
 fn sem_no_bytes_before_consent() {
     let dialer_src = std::fs::read_to_string(net_dir().join("src").join("dialer.rs")).unwrap();
     let code = code_only(&dialer_src);
-    // Find the public `pull` function's signature (up to its opening `{`) and confirm it takes a
-    // `ConsentAck` by value.
-    let sig_start = code
-        .find("pub async fn pull(")
-        .unwrap_or_else(|| panic!("sweep is stale — `dialer::pull` not found (did it get renamed?)"));
-    let sig_end = code[sig_start..]
-        .find(" {")
-        .map(|i| sig_start + i)
-        .unwrap_or_else(|| panic!("could not find the end of `pull`'s signature"));
-    let signature = &code[sig_start..sig_end];
+
+    // Every public async fn in the dialer dials the sender and moves bytes — all must gate on a
+    // ConsentAck taken BY VALUE.
+    let public_fns: Vec<String> = code
+        .match_indices("pub async fn ")
+        .map(|(i, _)| {
+            let rest = &code[i + "pub async fn ".len()..];
+            let end = rest.find('(').unwrap_or(0);
+            // Strip any generic parameter list (`pull_folder<P, D>` → `pull_folder`).
+            let name = &rest[..end];
+            name.split('<').next().unwrap_or(name).to_string()
+        })
+        .collect();
     assert!(
-        signature.contains("ConsentAck"),
-        "MAS-INV-4: `dialer::pull` must take a `ConsentAck` by value — the whole mechanism lives \
-         in its signature. Got:\n{signature}"
+        public_fns.iter().any(|f| f == "pull")
+            && public_fns.iter().any(|f| f == "fetch_manifest")
+            && public_fns.iter().any(|f| f == "pull_folder"),
+        "sweep is stale — expected the dialer's three byte-moving entry points \
+         (pull / fetch_manifest / pull_folder), found: {public_fns:?}"
     );
-    // ...and specifically NOT `&ConsentAck`/`Option<ConsentAck>` — a reference or optional value
-    // would let a caller route around ever having called `acknowledge_ip_exposure`.
-    assert!(
-        !signature.contains("&ConsentAck") && !signature.contains("Option<ConsentAck>"),
-        "MAS-INV-4: `ConsentAck` must be taken BY VALUE, not by reference or as an Option:\n{signature}"
-    );
+
+    for name in &public_fns {
+        let needle = format!("pub async fn {name}");
+        let sig_start = code.find(&needle).expect("just enumerated");
+        let sig_end = code[sig_start..]
+            .find(" {")
+            .map(|i| sig_start + i)
+            .unwrap_or_else(|| panic!("could not find the end of `{name}`'s signature"));
+        let signature = &code[sig_start..sig_end];
+        assert!(
+            signature.contains("ConsentAck"),
+            "MAS-INV-4: `dialer::{name}` dials the sender, so it must take a `ConsentAck` by \
+             value — the whole mechanism lives in its signature. Got:\n{signature}"
+        );
+        // ...and specifically NOT `&ConsentAck`/`Option<ConsentAck>` — a reference or optional
+        // value would let a caller route around ever having called `acknowledge_ip_exposure`.
+        assert!(
+            !signature.contains("&ConsentAck") && !signature.contains("Option<ConsentAck>"),
+            "MAS-INV-4: `dialer::{name}`'s `ConsentAck` must be taken BY VALUE, not by reference \
+             or as an Option:\n{signature}"
+        );
+    }
 }
 
 /// MAS-INV-4 — even `mascara recv --yes` prints the IP-exposure notice before proceeding: a
@@ -610,10 +647,12 @@ fn sem_consent_notice_always_printed() {
         .lines()
         .position(|l| l.contains("IP_EXPOSURE_NOTICE"))
         .unwrap_or_else(|| panic!("sweep is stale — no reference to IP_EXPOSURE_NOTICE in the CLI"));
+    // M3: the notice + prompt moved into `consent_prompt`, whose skip branch is `if yes { return
+    // Ok(true) }` — accept either polarity; the property is the ORDER, not the spelling.
     let yes_check_line = code
         .lines()
-        .position(|l| l.contains("if !yes"))
-        .unwrap_or_else(|| panic!("sweep is stale — no `if !yes` guard found in cmd_recv"));
+        .position(|l| l.contains("if !yes") || l.contains("if yes"))
+        .unwrap_or_else(|| panic!("sweep is stale — no `--yes` branch found in the CLI consent path"));
 
     assert!(
         notice_line < yes_check_line,
@@ -621,5 +660,35 @@ fn sem_consent_notice_always_printed() {
          can only skip the PROMPT, never the disclosure (notice at line {}, `if !yes` at line {})",
         notice_line + 1,
         yes_check_line + 1
+    );
+
+    // Stage 2 of a FOLDER receive opens a second connection (DESIGN §5, amended 2026-07-27 —
+    // codex #5). It carries the short `IP_EXPOSURE_REMINDER` rather than repeating the full
+    // notice (same sharer, nothing new disclosed), but that reminder is subject to the SAME
+    // rule: printed before the `--yes` branch, so a scripted folder pull is never silent at the
+    // moment the second connection opens.
+    let reminder_line = code
+        .lines()
+        .position(|l| l.contains("IP_EXPOSURE_REMINDER"))
+        .unwrap_or_else(|| {
+            panic!(
+                "sweep is stale — no reference to IP_EXPOSURE_REMINDER in the CLI. Folder stage 2 \
+                 must disclose that it opens a second connection (DESIGN §5)."
+            )
+        });
+    // The `--yes` branch INSIDE `start_prompt` — the first one at or after the reminder print.
+    let start_yes_line = code
+        .lines()
+        .enumerate()
+        .skip(reminder_line)
+        .find(|(_, l)| l.contains("if yes") || l.contains("if !yes"))
+        .map(|(i, _)| i)
+        .unwrap_or_else(|| panic!("sweep is stale — no `--yes` branch after the stage-2 reminder"));
+    assert!(
+        reminder_line < start_yes_line,
+        "MAS-INV-4: the folder stage-2 reminder must print BEFORE its `--yes` branch (reminder at \
+         line {}, branch at line {})",
+        reminder_line + 1,
+        start_yes_line + 1
     );
 }

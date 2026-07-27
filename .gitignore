@@ -4,5 +4,8 @@
 *.md
 !**/README.md
 
-# Claude Code local settings (contains LiteLLM key)
-.claude/settings.local.json
+# Claude Code local settings + its editor/session artifacts. settings.local.json holds the
+# LiteLLM key, and the tooling leaves timestamped `.bak-*` copies of it beside the original —
+# ignore the whole family, not just the one name, so a stray `git add -A` can never stage a key.
+.claude/settings.local.json*
+.claude/scheduled_tasks.lock

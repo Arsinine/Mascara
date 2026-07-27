@@ -33,6 +33,26 @@ pub enum CoreError {
     #[error("link assertion rejected: {0}")]
     Assertion(String),
 
+    /// A folder manifest could not be decoded or its `root_hash` commitment did not verify
+    /// (M3 brief §1; DESIGN §4 — the receiver buffers the whole manifest and checks
+    /// `sha256(bytes) == folder_ref.root_hash` before trusting a single path). Every cause is
+    /// reasoned: a decode failure, a schema-version mismatch, a cap violation, or a tampered
+    /// byte-form — recognise-and-refuse, never a panic.
+    #[error("manifest rejected: {0}")]
+    Manifest(String),
+
+    /// A hard-refuse content-check policy refused a transfer whose sniffed type did not match
+    /// the declared name/mime (spec D7, M3 brief §1). Only emitted in hard-refuse mode; the
+    /// default warn-and-acknowledge mode surfaces a `Mismatch` as a regular [`crate::content_check`]
+    /// result, not an error.
+    #[error("content check refused: {0}")]
+    Content(String),
+
+    /// The transfer-history store (`transfers/history.json`) could not be read, written, or
+    /// updated. Local-only, purgeable (spec D9 / MAS-INV-2/6).
+    #[error("transfer history error: {0}")]
+    History(String),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

@@ -80,6 +80,16 @@ impl Card {
             )));
         }
         let payload: Vec<u8> = checked.byte_iter().collect();
+        Self::from_payload_bytes(&payload)
+    }
+
+    /// Validate a card payload (`0x01 || transport_pk || sealing_pk || binding_sig`, 129 bytes) and
+    /// return the parsed [`Card`]. This is the validation half of [`Card::parse`], factored out so a
+    /// ticket opener can validate a sender card carried **as payload bytes** (the byte-for-byte form
+    /// a `link_assertion` signs over — DESIGN §2) without a redundant bech32 round-trip. Every
+    /// failure is reasoned: a wrong length, a wrong version byte, an invalid transport key, or a
+    /// binding signature that does not verify (chorus H1) — never a panic (MT3).
+    pub fn from_payload_bytes(payload: &[u8]) -> Result<Self, CoreError> {
         if payload.len() != CARD_PAYLOAD_LEN {
             return Err(CoreError::InvalidCard(format!(
                 "wrong payload length {} (expected {CARD_PAYLOAD_LEN})",
@@ -141,6 +151,44 @@ mod tests {
         let s = card.encode();
         assert!(s.starts_with("mascara1"), "got: {s}");
         assert_eq!(Card::parse(&s).unwrap(), card);
+    }
+
+    #[test]
+    fn from_payload_bytes_round_trips() {
+        // `from_payload_bytes` is the entry point a ticket opener uses to validate a carried sender
+        // card. It must accept a valid payload and reject the same failures `parse` does.
+        let card = Identity::mint().card();
+        let bytes = card.payload_bytes();
+        assert_eq!(bytes.len(), 129);
+        assert_eq!(Card::from_payload_bytes(&bytes).unwrap(), card);
+    }
+
+    #[test]
+    fn from_payload_bytes_rejects_wrong_length_and_version() {
+        // Too short.
+        let err = Card::from_payload_bytes(&[0u8; 64]).unwrap_err().to_string();
+        assert!(err.contains("wrong payload length"), "got: {err}");
+        // Right length, wrong version byte.
+        let mut bad = [0u8; 129];
+        bad[0] = 9;
+        let err = Card::from_payload_bytes(&bad).unwrap_err().to_string();
+        assert!(err.contains("unsupported card version"), "got: {err}");
+    }
+
+    #[test]
+    fn from_payload_bytes_rejects_unbound_card() {
+        // A MITM-assembled card (Alice's transport + Mallory's sealing + Alice's sig) must be
+        // refused at the payload-bytes entry point too — this is the H1 guarantee a ticket opener
+        // relies on when it validates a carried `sender_card`.
+        let alice = Identity::mint().card();
+        let mallory = Identity::mint().card();
+        let franken = Card {
+            transport_pk: alice.transport_pk,
+            sealing_pk: mallory.sealing_pk,
+            binding_sig: alice.binding_sig,
+        };
+        let err = Card::from_payload_bytes(&franken.payload_bytes()).unwrap_err().to_string();
+        assert!(err.contains("not bound"), "got: {err}");
     }
 
     #[test]

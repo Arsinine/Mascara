@@ -52,6 +52,11 @@ sha2        = "0.10"
 secp256k1   = { version = "0.29", default-features = false, features = ["alloc"] }
 clap        = { version = "4", features = ["derive"] }
 
+# --- M3 content-type sniff (DESIGN.md §1/§4, spec D7). `infer` matches magic-number signatures
+#     against a byte buffer; Mascara compares the sniffed type to the sender-declared `name`/`mime`
+#     (MT9: a claim, never trust). Not a commitment substrate — a normal caret pin. ---
+infer       = "0.22"
+
 # --- M2 mascara-net (DESIGN.md §1/§4/§6, appraisal B1): the /mascara/xfer/1 protocol engine.
 #     iroh 1.0.3 (floor >=1.0.2 for the relay receive-lane fairness fix; 1.0.3 also fixes empty-
 #     ALPN accepts — DESIGN §12.7). default-features=false: no discovery service is pulled in at

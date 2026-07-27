@@ -10,8 +10,18 @@ pub enum NetError {
     Core(#[from] mascara_core::CoreError),
 
     /// An underlying I/O or stream failure — includes a QUIC stream breaking mid-transfer.
+    /// **Peer-side by convention:** a partial download survives this class (the stream broke; the
+    /// bytes on disk are still good — DESIGN §6.2 resume). Local filesystem failures use
+    /// [`NetError::LocalIo`] instead, so the two can be told apart when deciding a `.part`'s fate.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// A LOCAL filesystem failure while landing a download — creating/writing/flushing the
+    /// `.part`, or renaming it into place (disk full, permission denied, a vanished directory).
+    /// Distinct from [`NetError::Io`] because it is **not** a resumable condition: retrying the
+    /// same broken local state would fail the same way, so the partial is discarded (codex #6).
+    #[error("local storage error: {0}")]
+    LocalIo(String),
 
     /// A protocol-shape problem: a malformed ticket address, an unparseable frame, an
     /// unsupported version — recognise-and-refuse, never a panic.

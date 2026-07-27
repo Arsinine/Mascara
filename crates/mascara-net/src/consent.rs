@@ -15,6 +15,24 @@
 pub const IP_EXPOSURE_NOTICE: &str =
     "Direct transfer — the sharer will see your IP. Mascara has no IP-hiding mode. Continue?";
 
+/// The **stage-2 reminder** for a folder receive (DESIGN §5, amended 2026-07-27 — codex #5).
+///
+/// A folder pull opens a SECOND connection, so the honest question is what that second connection
+/// discloses. The answer is: nothing new. Stage 1 already showed [`IP_EXPOSURE_NOTICE`] and
+/// obtained consent, and the second dial goes to the **same sharer, who already has the IP** —
+/// so re-printing the full notice would repeat a disclosure verbatim without conveying a new fact.
+///
+/// What the receiver DOES need at stage 2 is to know that the start action opens that connection
+/// now, having just seen the file list and total. This line says exactly that, and front-ends
+/// print it **unconditionally — including under `--yes`** (`sem_consent_notice_always_printed`),
+/// so a scripted transfer never goes silent at the moment the second connection opens.
+///
+/// Binding-tier copy like the notice itself: it may be made clearer, never softer
+/// (`sem_consent_copy_binding_tier`).
+pub const IP_EXPOSURE_REMINDER: &str =
+    "Starting the download opens a second direct connection to the same sharer — the IP exposure \
+     disclosed above applies to it too.";
+
 /// Proof that [`IP_EXPOSURE_NOTICE`] was shown to the user. The field is private to this module,
 /// so the **only** way to construct one is [`acknowledge_ip_exposure`] — that is the whole
 /// mechanism (DESIGN §5).
@@ -39,6 +57,26 @@ mod tests {
     #[test]
     fn ack_is_constructible_via_the_one_function() {
         let _ack: ConsentAck = acknowledge_ip_exposure();
+    }
+
+    /// `sem_consent_copy_binding_tier`, stage-2 form: the folder reminder must name the second
+    /// connection and point at the disclosure that covers it — never imply the download is
+    /// somehow private, and never soften what stage 1 said.
+    #[test]
+    fn reminder_names_the_second_connection_honestly() {
+        let lower = IP_EXPOSURE_REMINDER.to_lowercase();
+        assert!(
+            lower.contains("second direct connection"),
+            "must name the second connection: {IP_EXPOSURE_REMINDER}"
+        );
+        assert!(
+            lower.contains("ip exposure"),
+            "must point at the IP exposure it inherits: {IP_EXPOSURE_REMINDER}"
+        );
+        assert!(
+            !lower.contains("anonymous") && !lower.contains("private") && !lower.contains("secure"),
+            "must not oversell privacy it does not deliver (MAS-INV-4): {IP_EXPOSURE_REMINDER}"
+        );
     }
 
     /// `sem_consent_notice_always_printed` / `sem_consent_copy_binding_tier`: the notice must name

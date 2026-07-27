@@ -1,6 +1,6 @@
 //! `link_assertion` — **verify-only** (spec Identity & Trust Boundary, DESIGN.md §2).
 //!
-//! An optional per-transfer proof that a hoard `npub` vouches for a ticket's `endpoint_key`:
+//! An optional per-transfer proof that a hoard `npub` vouches for a ticket's sender card:
 //! *"hoard-npub X authorises Mascara endpoint Y for this exchange."* It rides **inside the sealed
 //! ticket** (never a public relay event — MAS-INV-1/3), so it never becomes a public `npub`→endpoint
 //! map. Mascara **only verifies**; **minting is Hoardbook's job** — this module also *defines the
@@ -29,7 +29,7 @@ use crate::ticket::Nonce;
 /// Domain-separation context for the assertion signature (versioned with the format).
 pub const LINK_CONTEXT: &[u8] = b"mascara-link-v1";
 
-/// OPTIONAL per-transfer proof that a hoard `npub` vouches for a ticket's `endpoint_key` (spec
+/// OPTIONAL per-transfer proof that a hoard `npub` vouches for a ticket's sender card (spec
 /// Identity & Trust Boundary, DESIGN.md §2). It rides inside the sealed ticket
 /// ([`crate::ticket::Ticket::link_assertion`]); Mascara only **verifies** it (below), minting is
 /// Hoardbook's job. This type lives here — beside its verifier and signing spec — so the whole
@@ -51,6 +51,41 @@ pub struct LinkAssertion {
 #[cfg(test)]
 pub(crate) fn test_fixture_link_assertion() -> LinkAssertion {
     LinkAssertion { npub: [5u8; 32], sig: vec![9u8; 64] }
+}
+
+/// Test-only: corrupt one byte of an assertion's signature, for the `sem_link_invalid_is_refused`
+/// end-to-end test (a present-but-invalid assertion must be refused by `Ticket::open`). Lives here
+/// so the `npub` field/symbol stays confined to this module (MAS-INV-1 sweep): a caller in another
+/// module mutates the assertion through this helper rather than naming its fields directly.
+#[cfg(test)]
+pub(crate) fn corrupt_sig_for_tests(a: &mut LinkAssertion) {
+    if a.sig.is_empty() {
+        a.sig.push(0xff);
+    } else {
+        a.sig[0] ^= 0xff;
+    }
+}
+
+/// Test-only: mint a real BIP340 `LinkAssertion` for `card` + `nonce` under the hoard secret
+/// `secret`, for the `sem_link_invalid_is_refused` end-to-end test (a valid assertion must open
+/// fine; variants minted over the wrong card/nonce must be refused). Lives here so the
+/// `secp256k1`/`schnorr`/`Keypair` symbols stay confined to this module (MAS-INV-1 sweep): a caller
+/// in another module mints through this helper rather than naming the secp256k1 API directly.
+/// Deterministic (`no_aux_rand`) so tests need no OS entropy or `rand` feature.
+#[cfg(test)]
+pub(crate) fn mint_link_assertion_for_tests(
+    card: &Card,
+    nonce: &Nonce,
+    secret: &[u8; 32],
+) -> LinkAssertion {
+    use secp256k1::{Keypair, SecretKey};
+    let secp = secp256k1::Secp256k1::signing_only();
+    let sk = SecretKey::from_slice(secret).expect("test secret is a valid secp256k1 secret");
+    let kp = Keypair::from_secret_key(&secp, &sk);
+    let (xonly, _) = kp.x_only_public_key();
+    let msg = secp256k1::Message::from_digest(link_message(card, nonce));
+    let sig = secp.sign_schnorr_no_aux_rand(&msg, &kp);
+    LinkAssertion { npub: xonly.serialize(), sig: sig.as_ref().to_vec() }
 }
 
 /// The exact 32-byte message a `link_assertion` signs (and Hoardbook must sign, when it mints one):

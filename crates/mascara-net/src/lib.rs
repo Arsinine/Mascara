@@ -12,7 +12,7 @@
 //!   relay disabled — MAS-INV-3/D1), and the ticket `Endpoint` ↔ iroh `EndpointAddr` mapping.
 //! - [`listener`] — the `serve` accept loop and the server side of `/mascara/xfer/1`: the DESIGN
 //!   §4 auth predicate as a pure, unit-testable function, plus the per-stream request handler.
-//! - [`dialer`] — open ticket → consent gate → dial, pinning the ticket's `endpoint_key`.
+//! - [`dialer`] — open ticket → consent gate → dial, pinning the ticket's sender-card transport key.
 //! - [`engine`] — the client-side single-file pull: incremental SHA-256, progress callback,
 //!   collision-safe renames, the hash-gate that makes a file "available".
 //! - [`consent`] — MAS-INV-4 made structural: `ConsentAck` is constructible only via

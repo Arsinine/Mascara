@@ -17,9 +17,12 @@
 
 pub mod assertion;
 pub mod card;
+pub mod content_check;
 pub mod error;
+pub mod history;
 pub mod identity;
 pub mod keystore;
+pub mod manifest;
 pub mod registry;
 pub mod share;
 pub mod source;
@@ -27,9 +30,20 @@ pub mod ticket;
 
 pub use assertion::LinkAssertion;
 pub use card::Card;
+pub use content_check::{check as check_content, Policy as ContentPolicy, Verdict as ContentVerdict};
 pub use error::CoreError;
+pub use history::{
+    History, HistoryConfig, HistoryLog, HistoryRecord, HistoryStore, TransferId, TransferState,
+    HISTORY_VERSION,
+};
 pub use identity::Identity;
+pub use manifest::{
+    decode as decode_manifest, decode_and_verify as decode_and_verify_manifest,
+    encode as encode_manifest, root_hash as manifest_root_hash, verify as verify_manifest,
+    DecodeOutcome, Manifest, ManifestEntry, HARD_CAP_BYTES as MANIFEST_HARD_CAP_BYTES,
+    MANIFEST_VERSION, SOFT_WARN_BYTES as MANIFEST_SOFT_WARN_BYTES,
+};
 pub use registry::{FileStore, IssuedRecord, IssuedStore, IssuedTickets, Registry};
-pub use share::ShareDescriptor;
+pub use share::{FileDescriptor, FolderDescriptor, FolderEntry, ShareDescriptor};
 pub use source::{check_source, SourceCheck};
-pub use ticket::{Endpoint, FileRef, Grant, Kind, Nonce, Ticket};
+pub use ticket::{Endpoint, FileRef, FolderRef, Grant, Kind, Nonce, Payload, Ticket};

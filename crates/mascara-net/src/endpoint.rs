@@ -123,15 +123,20 @@ pub async fn local_endpoint_addrs(ep: &iroh::Endpoint) -> mascara_core::Endpoint
     mascara_core::Endpoint { addrs, coordinator: None }
 }
 
-/// Rebuild the sender's dialable `EndpointAddr` from an opened ticket (DESIGN §3): `endpoint_key`
-/// is the transport public key the ticket was sealed to, `endpoint.addrs` are the direct
-/// candidates gathered at issue time. A ticket with an unparseable key or address is a reasoned
-/// refusal, never a panic — the paste channel is untrusted, and so, transitively, is everything
-/// sealed inside it.
+/// Rebuild the sender's dialable `EndpointAddr` from an opened ticket (DESIGN §3): the sender's
+/// transport public key comes from the carried `sender_card` (validated at `Ticket::open`), and
+/// `endpoint.addrs` are the direct candidates gathered at issue time. A ticket with an unparseable
+/// key or address is a reasoned refusal, never a panic — the paste channel is untrusted, and so,
+/// transitively, is everything sealed inside it.
 pub fn endpoint_addr_from_ticket(ticket: &Ticket) -> Result<iroh::EndpointAddr, NetError> {
-    let id = iroh::PublicKey::from_bytes(&ticket.endpoint_key).map_err(|e| {
-        NetError::Protocol(format!("ticket endpoint_key is not a valid transport key: {e}"))
-    })?;
+    // `sender_card` was already validated at `Ticket::open`, so the transport pk is a real ed25519
+    // key; `endpoint_addr_from_transport_pk` is the bytes→EndpointId half (kept inline here).
+    let transport_pk = ticket
+        .sender_card()
+        .map_err(|e| NetError::Protocol(format!("ticket carries an invalid sender card: {e}")))?
+        .transport_pk;
+    let id = iroh::PublicKey::from_bytes(&transport_pk)
+        .map_err(|e| NetError::Protocol(format!("ticket sender card transport key is not valid: {e}")))?;
     let mut addrs: BTreeSet<iroh::TransportAddr> = BTreeSet::new();
     for s in &ticket.endpoint.addrs {
         let sa = SocketAddr::from_str(s).map_err(|e| {
@@ -161,7 +166,7 @@ mod tests {
         let ticket = Ticket::new_file(
             sample_file_ref(),
             CoreEndpoint { addrs: vec!["127.0.0.1:41000".into()], coordinator: None },
-            card.transport_pk,
+            card.payload_bytes(),
             None,
             None,
             Nonce::mint(),
@@ -177,7 +182,7 @@ mod tests {
         let ticket = Ticket::new_file(
             sample_file_ref(),
             CoreEndpoint { addrs: vec!["not-an-address".into()], coordinator: None },
-            identity.card().transport_pk,
+            identity.card().payload_bytes(),
             None,
             None,
             Nonce::mint(),
@@ -191,7 +196,7 @@ mod tests {
         let ticket = Ticket::new_file(
             sample_file_ref(),
             CoreEndpoint::default(),
-            identity.card().transport_pk,
+            identity.card().payload_bytes(),
             None,
             None,
             Nonce::mint(),
